@@ -1,5 +1,8 @@
-# clinical-lab-data-workflows-concept
-CLSDW—Clinical Lab &amp; Data Workflows—is a concept coded by Stacy T. that unifies clinical lab processes and data into traceable workflows. It provides public working examples in HTML, JSON, and XML on GitHub, plus a full Python implementation
+# Clinical Lab Data Workflow
+
+Production-style monitoring dashboard simulating a high-throughput clinical genomics pipeline. 
+Implemented SLA/TAT enforcement (STAT 48h, ROUTINE 7 days), batch-level NGS QC rollups, and incident tracking. 
+Designed a PostgreSQL (Supabase) relational schema using synthetic data to model sample flow, QC failures, and operational bottlenecks. 
 
 ## Dashboard Overview
 ![CLSDW Clinical Lab Overview](dashboar.png)
