@@ -4,7 +4,6 @@ Created By: Dr. Stacy Toriola, MD, MSc.
 
 Production-style monitoring dashboard simulating a high-throughput clinical genomics pipeline (genomics = DNA/RNA testing).
 Goal: Measuring True Efficiency (Fair) vs Relative Efficiency (Raw). Raw efficiency (how benches are graded today) vs Fair efficiency (the same score after removing delays outside the tech’s control, such as late delivery and multi-test handoffs).
-Terms are written as Acronym (Short word) so non-lab readers can follow.
 
 ## Main goal: fair bench scores
 Each lab bench team gets an 8-hour shift production efficiency score out of 100%: how many specimens it finished against how many came into its department that shift. That score does not account for two things outside the tech's control.
@@ -37,8 +36,6 @@ Normal / Abnormal is calculated from the value, not typed. For each REPORTED sam
 - Normal (In range), Abnormal (Out of range) with a High / Low flag, Borderline (Near limit)
 - Inconclusive (Unclear): kept only when the lab marks it
 - No range (Not listed), Unit mismatch (Wrong unit), Sex needed (Missing sex), Context needed (Missing detail)
-
-The computed result replaces any typed result.
 
 Reference ranges: NBME Laboratory Values reference sheet.
 
