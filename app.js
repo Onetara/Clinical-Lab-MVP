@@ -89,6 +89,9 @@ function normalizeRecord(r) {
     expectedAt: String(r.expectedAt ?? '').trim(),   // when the sample was expected to arrive
     receivedAt: String(r.receivedAt ?? '').trim(),   // when the sample actually arrived
     reportedAt: String(r.reportedAt ?? '').trim(),   // when the result was reported
+    bench: String(r.bench ?? '').trim(),                // lab bench (department); derived from the test when blank
+    benchReceivedAt: String(r.benchReceivedAt ?? '').trim(), // when that bench got the sample (blank = same as receivedAt)
+    testCount: (r.testCount === '' || r.testCount == null) ? 1 : Number(r.testCount), // tests ordered on this sample
   };
 }
 
@@ -171,6 +174,9 @@ function parseXml(text) {
         expectedAt: g('expectedAt'),
         receivedAt: g('receivedAt'),
         reportedAt: g('reportedAt'),
+        bench: g('bench'),
+        benchReceivedAt: g('benchReceivedAt'),
+        testCount: g('testCount'),
         source: 'xml'
       });
     });
@@ -384,7 +390,7 @@ function validateRecords(records) {
     const id = r.id || `row_${idx+1}`;
 
     // Required fields
-    const requiredFields = ['id','patientId','specimenType','status','value','unit','collectedAt'];
+    const requiredFields = ['id','patientId','specimenType','status','value','unit','collectedAt','receivedAt']; // receivedAt = actual arrival at the lab
     for (const f of requiredFields) {
       if (r[f] === '' || r[f] === undefined || r[f] === null || (f === 'value' && Number.isNaN(r[f]))) {
         addError(idx, id, 'E001', `Required field '${f}' is missing`, f);
@@ -420,7 +426,7 @@ function validateRecords(records) {
     }
 
     // Efficiency timestamps: optional, but must be ISO and in order
-    for (const f of ['expectedAt', 'receivedAt', 'reportedAt']) {
+    for (const f of ['expectedAt', 'receivedAt', 'reportedAt', 'benchReceivedAt']) {
       if (r[f] && !isIsoDate(r[f])) addError(idx, id, 'E007', `Invalid ISO timestamp (${f})`, f);
     }
     {
@@ -428,6 +434,12 @@ function validateRecords(records) {
       if (isIsoDate(r.receivedAt) && isIsoDate(r.collectedAt) && tr < tc) addError(idx, id, 'E004', 'receivedAt is before collectedAt', 'receivedAt');
       if (isIsoDate(r.reportedAt) && isIsoDate(r.receivedAt) && tp < tr) addError(idx, id, 'E004', 'reportedAt is before receivedAt', 'reportedAt');
       if (isIsoDate(r.reportedAt) && tp > now) addError(idx, id, 'E004', 'reportedAt cannot be in the future', 'reportedAt');
+      if (isIsoDate(r.benchReceivedAt)) {
+        const tb = Date.parse(r.benchReceivedAt);
+        if (isIsoDate(r.receivedAt) && tb < tr) addError(idx, id, 'E004', 'benchReceivedAt is before receivedAt', 'benchReceivedAt');
+        if (isIsoDate(r.reportedAt) && tp < tb) addError(idx, id, 'E004', 'reportedAt is before benchReceivedAt', 'reportedAt');
+      }
+      if (!Number.isInteger(r.testCount) || r.testCount < 1 || r.testCount > 20) addError(idx, id, 'E003', 'testCount must be a whole number from 1 to 20', 'testCount');
     }
 
     // Format checks
@@ -440,10 +452,10 @@ function validateRecords(records) {
       const t = Date.parse(r.collectedAt);
       if (Number.isNaN(t)) addError(idx, id, 'E007', 'Unparseable collectedAt', 'collectedAt');
       else {
-        if (t > now) addError(idx, id, 'E004', 'collectedAt cannot be in the future', 'collectedAt');
+        if (t > now) addError(idx, id, 'E004', 'collectedAt cannot be in the future', 'collectedAt');   // not used for the order check below
         if (t < threeYearsAgo) addError(idx, id, 'E003', 'collectedAt older than 3 years', 'collectedAt');
         if (t < lastTs) addError(idx, id, 'E004', 'Dataset chronology must be non-decreasing', 'collectedAt');
-        lastTs = Math.max(lastTs, t);
+        if (t <= now) lastTs = Math.max(lastTs, t);
       }
     }
 
@@ -497,10 +509,28 @@ function processRecords() {
 /* ===========================
    Efficiency metrics (real timestamps)
    - Wait time (TAT) = reportedAt - receivedAt, in hours
-   - Deadline (SLA): STAT 48h, ROUTINE 168h (7 days); editable on the Reconcile tab
+   - Deadline (SLA): STAT 48h, ROUTINE 168h (7 days); editable on the Deadlines tab
    - Delivery delay = receivedAt - expectedAt, in hours (positive = late)
    =========================== */
 const HOUR_MS = 3600 * 1000;
+// Time display: military hours with EST standard time in parentheses, e.g. 2026-11-02 1430 (2:30 PM EST)
+const EST_OFFSET_MS = -5 * HOUR_MS;
+function fmtMil(iso) {
+  if (!hasTs(iso)) return '-';
+  const d = new Date(Date.parse(iso) + EST_OFFSET_MS);
+  const p = n => String(n).padStart(2, '0');
+  const h = d.getUTCHours(), m = d.getUTCMinutes();
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(h)}${p(m)} (${h12}:${p(m)} ${h < 12 ? 'AM' : 'PM'} EST)`;
+}
+// Form input (date + 4-digit military time, EST) -> ISO UTC string; '' if empty/invalid
+function estToIso(dateStr, hhmm) {
+  const t = String(hhmm || '').trim().replace(':', '');
+  if (!dateStr || !/^([01]\d|2[0-3])[0-5]\d$/.test(t)) return '';
+  const [y, mo, da] = dateStr.split('-').map(Number);
+  const ms = Date.UTC(y, mo - 1, da, Number(t.slice(0, 2)), Number(t.slice(2))) - EST_OFFSET_MS;
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
 function hoursBetween(a, b) { return (Date.parse(b) - Date.parse(a)) / HOUR_MS; }
 function hasTs(s) { return typeof s === 'string' && isIsoDate(s); }
 
@@ -520,6 +550,7 @@ function computeEfficiency(records) {
     deliveryDelays: [],        // hours, positive = late
     lateDeliveries: 0,
     delayBySpecimen: {},       // specimenType -> {sum, n}
+    labBySpecimen: {},         // specimenType -> {sum, n} lab time (arrival to reported)
     reportedCount: 0,
     dailyOutput: 0,
   };
@@ -530,6 +561,10 @@ function computeEfficiency(records) {
     const w = waitHours(r);
     if (w !== null) {
       out.waits.push(w);
+      const lk = r.specimenType;
+      out.labBySpecimen[lk] = out.labBySpecimen[lk] || { sum: 0, n: 0 };
+      out.labBySpecimen[lk].sum += w;
+      out.labBySpecimen[lk].n++;
       if (w > deadlineFor(r)) out.breaches++;
     }
     if (r.status === 'REPORTED' && hasTs(r.reportedAt)) {
@@ -627,6 +662,8 @@ function renderValidation() {
   setText('kpiValid', STCDP.metrics.valid);
   setText('kpiErrors', STCDP.metrics.errors);
   setText('kpiQuarantine', STCDP.metrics.quarantine);
+  setText('cntErrors', STCDP.errors.length);
+  setText('cntQuarantine', STCDP.quarantined.length);
 
   // Errors table
   const tbody = document.getElementById('tblErrors');
@@ -659,7 +696,30 @@ function renderValidation() {
     tq.appendChild(tr);
   }
 }
+function renderDelivery() {
+  const tbody = document.getElementById('tblDelivery');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  let i = 1;
+  for (const r of STCDP.validRecords) {
+    if (!hasTs(r.expectedAt) || !hasTs(r.receivedAt)) continue;
+    const late = hoursBetween(r.expectedAt, r.receivedAt);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i++}</td>
+      <td><code class="stcdp-chip">${escapeHtml(r.id)}</code></td>
+      <td>${escapeHtml(r.specimenType)}</td>
+      <td>${escapeHtml(fmtMil(r.expectedAt))}</td>
+      <td>${escapeHtml(fmtMil(r.receivedAt))}</td>
+      <td>${late > 0 ? late.toFixed(1) : '0.0'}</td>
+      <td>${late > 0 ? '<span class="stcdp-bad">LATE</span>' : '<span class="stcdp-ok">ON TIME</span>'}</td>
+      <td>${escapeHtml(fmtMil(r.reportedAt))}</td>`;
+    tbody.appendChild(tr);
+  }
+  setText('cntDelivery', i - 1);
+}
 function renderResults() {
+  renderDelivery();
   const tbody = document.getElementById('tblResults');
   if (!tbody) return;
   tbody.innerHTML = '';
@@ -683,6 +743,7 @@ function renderResults() {
       <td>${info.dx ? escapeHtml(info.dx.source) : '-'}</td>`;
     tbody.appendChild(tr);
   }
+  setText('cntResults', tbody.children.length);
 }
 function renderProcessSummary(count) {
   const el = document.getElementById('processSummary');
@@ -710,6 +771,7 @@ function renderReconcile() {
       <td>${slaCell}</td>`;
     tbody.appendChild(tr);
   }
+  setText('cntAck', STCDP.acks.length);
 }
 function renderAudit() {
   const tbody = document.getElementById('tblAudit');
@@ -767,9 +829,15 @@ function renderDashboard() {
   eff.waits.forEach(w => { counts[Math.min(nb - 1, Math.floor(w / BUCKET))]++; });
   drawValueBars('chartWait', counts.map((_, i) => `${i * BUCKET}-${(i + 1) * BUCKET}h`), eff.waits.length ? counts : [], ['#80ffdb']);
 
+  renderBench();
+
   // Slowdown (bottleneck): average hours late, by specimen
-  const spec = Object.entries(eff.delayBySpecimen).map(([k, v]) => [k, v.sum / v.n]).sort((a, b) => b[1] - a[1]);
-  drawValueBars('chartDelivery', spec.map(([k]) => k), spec.map(([, v]) => Number(v.toFixed(1))), ['#ff9f1c']);
+  const keys = [...new Set([...Object.keys(eff.delayBySpecimen), ...Object.keys(eff.labBySpecimen)])];
+  const avg = (o, k) => o[k] ? Number((o[k].sum / o[k].n).toFixed(1)) : 0;
+  const rows = keys.map(k => [k, avg(eff.delayBySpecimen, k), avg(eff.labBySpecimen, k)]).sort((a, b) => b[1] - a[1]);
+  drawGroupedBars('chartDelivery', rows.map(r => r[0]), [
+    { name: 'Late delivery (hours)', color: '#ff9f1c', values: rows.map(r => r[1]) },
+    { name: 'Lab time (hours)', color: '#80ffdb', values: rows.map(r => r[2]) }]);
 }
 
 /* Charts */
@@ -785,6 +853,34 @@ function renderErrorLegend(entries) {
     li.innerHTML = `<strong>${escapeHtml(code)}</strong> — ${escapeHtml(meta ? `${meta.title} (${meta.short})` : 'See playbook')}: ${n}`;
     host.appendChild(li);
   }
+}
+// Two bars per label (e.g. delivery delay vs lab time), with a legend
+function drawGroupedBars(canvasId, labels, series) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (!labels.length) { ctx.fillStyle = '#a8b0bf'; ctx.font = '12px system-ui'; ctx.fillText('No data yet', 20, c.height / 2); return; }
+  const max = Math.max(1, ...series.flatMap(s => s.values));
+  const groupW = Math.floor((c.width - 40) / labels.length);
+  const barW = Math.max(14, Math.min(40, Math.floor((groupW - 12) / series.length)));
+  const top = 34, base = c.height - 44;
+  let lx = 20;
+  ctx.font = '13px system-ui';
+  series.forEach(s => {
+    ctx.fillStyle = s.color; ctx.fillRect(lx, 8, 12, 12);
+    ctx.fillStyle = '#e6edf7'; ctx.fillText(s.name, lx + 16, 19);
+    lx += 16 + ctx.measureText(s.name).width + 16;
+  });
+  labels.forEach((lab, i) => {
+    const gx = 20 + i * groupW;
+    series.forEach((s, j) => {
+      const v = s.values[i], h = Math.round((v / max) * (base - top - 16)), x = gx + j * (barW + 2);
+      ctx.fillStyle = s.color; ctx.fillRect(x, base - h, barW, h);
+      ctx.fillStyle = '#e6edf7'; ctx.font = 'bold 12px system-ui'; ctx.fillText(String(v), x, base - h - 4);
+    });
+    ctx.fillStyle = '#a8b0bf'; ctx.font = '13px system-ui'; ctx.fillText(String(lab), gx, base + 16);
+  });
 }
 // Generic labelled bar chart with value labels on top. colors cycle per bar.
 function drawValueBars(canvasId, labels, values, colors) {
@@ -829,6 +925,103 @@ function drawValueBars(canvasId, labels, values, colors) {
 }
 
 /* ===========================
+   Bench production efficiency (per lab bench, per shift)
+   Shifts (EST): Night 0000-0800, Morning 0800-1600, Afternoon 1600-0000.
+   A sample belongs to the shift in which its BENCH received it.
+   Raw score  = finished inside the shift / received in the shift (today's grading).
+   Fair score = same, but leaves out samples that reached the bench with less time left
+                than that bench normally needs (late delivery or late handoff). The time
+                needed grows with the number of tests on the sample (multi-test).
+   =========================== */
+const SHIFTS = [['Night', 0, 8], ['Morning', 8, 16], ['Afternoon', 16, 24]];
+const BENCH_BY_TEST = {
+  'sodium': 'Chemistry', 'potassium': 'Chemistry', 'creatinine': 'Chemistry', 'glucose': 'Chemistry',
+  'alanine aminotransferase': 'Chemistry', 'aspartate aminotransferase': 'Chemistry', 'calcium': 'Chemistry',
+  'triglycerides': 'Chemistry', 'ldl cholesterol': 'Chemistry', 'cholesterol, total': 'Chemistry',
+  'tsh': 'Immunoassay', 'ferritin': 'Immunoassay', 'troponin i': 'Immunoassay',
+  'hemoglobin a1c': 'Hematology', 'hemoglobin': 'Hematology', 'leukocyte count': 'Hematology', 'platelet count': 'Hematology',
+};
+function benchFor(r) {
+  if (r.bench) return r.bench;
+  const t = BENCH_BY_TEST[String(r.test || '').toLowerCase()];
+  if (t) return t;
+  if (r.specimenType === 'URINE') return 'Urinalysis';
+  if (r.specimenType === 'BLOOD') return 'Hematology';
+  if (r.specimenType === 'SERUM' || r.specimenType === 'PLASMA') return 'Chemistry';
+  return 'Unassigned';
+}
+function shiftOf(iso) {   // returns {name, endMs} using EST clock
+  const ms = Date.parse(iso) + EST_OFFSET_MS;
+  const d = new Date(ms);
+  const h = d.getUTCHours();
+  const sh = SHIFTS.find(s => h >= s[1] && h < s[2]);
+  const dayStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return { name: sh[0], endMs: dayStart + sh[2] * HOUR_MS - EST_OFFSET_MS };
+}
+function median(a) { const s = a.slice().sort((x, y) => x - y); const m = s.length >> 1; return s.length ? (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) : 0; }
+function computeBenchShifts(records) {
+  const rows = [];
+  for (const r of records) {
+    const start = hasTs(r.benchReceivedAt) ? r.benchReceivedAt : r.receivedAt;
+    if (!hasTs(start)) continue;
+    rows.push({ r, bench: benchFor(r), start, sh: shiftOf(start) });
+  }
+  // typical time per test for each bench (median, reported samples only)
+  const perTest = {};
+  for (const x of rows) {
+    if (x.r.status === 'REPORTED' && hasTs(x.r.reportedAt)) {
+      (perTest[x.bench] = perTest[x.bench] || []).push(hoursBetween(x.start, x.r.reportedAt) / Math.max(1, x.r.testCount));
+    }
+  }
+  const typical = Object.fromEntries(Object.entries(perTest).map(([k, v]) => [k, median(v)]));
+  const groups = {};
+  for (const x of rows) {
+    const key = x.bench + '|' + x.sh.name;
+    const g = groups[key] = groups[key] || { bench: x.bench, shift: x.sh.name, received: 0, finished: 0, lateIn: 0, eligible: 0, eligibleDone: 0, multi: 0, proc: [], handoff: [], late: [] };
+    const done = x.r.status === 'REPORTED' && hasTs(x.r.reportedAt) && Date.parse(x.r.reportedAt) <= x.sh.endMs;
+    const left = (x.sh.endMs - Date.parse(x.start)) / HOUR_MS;
+    const needed = (typical[x.bench] || 0) * Math.max(1, x.r.testCount);
+    const lateIn = left < needed;
+    g.received++;
+    if (done) g.finished++;
+    if (lateIn) g.lateIn++; else { g.eligible++; if (done) g.eligibleDone++; }
+    if (x.r.testCount > 1) g.multi++;
+    if (x.r.status === 'REPORTED' && hasTs(x.r.reportedAt)) g.proc.push(hoursBetween(x.start, x.r.reportedAt));
+    if (hasTs(x.r.receivedAt)) g.handoff.push(hoursBetween(x.r.receivedAt, x.start));
+    if (hasTs(x.r.expectedAt) && hasTs(x.r.receivedAt)) g.late.push(Math.max(0, hoursBetween(x.r.expectedAt, x.r.receivedAt)));
+  }
+  const order = s => SHIFTS.findIndex(z => z[0] === s);
+  return Object.values(groups).sort((a, b) => a.bench.localeCompare(b.bench) || order(a.shift) - order(b.shift));
+}
+function renderBench() {
+  const tbody = document.getElementById('tblBench');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const avg = a => a.length ? (a.reduce((p, c) => p + c, 0) / a.length).toFixed(1) : '-';
+  const pct = (n, d) => d ? Math.round(100 * n / d) + '%' : '-';
+  const list = computeBenchShifts(STCDP.validRecords);
+  for (const g of list) {
+    const raw = g.received ? Math.round(100 * g.finished / g.received) : 0;
+    const fair = g.eligible ? Math.round(100 * g.eligibleDone / g.eligible) : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(g.bench)}</td>
+      <td>${escapeHtml(g.shift)}</td>
+      <td>${g.received}</td>
+      <td>${pct(g.finished, g.received)}</td>
+      <td>${g.lateIn}</td>
+      <td>${g.eligible ? fair + '%' : '-'}</td>
+      <td>${g.eligible ? (fair - raw >= 0 ? '+' : '') + (fair - raw) + ' pts' : '-'}</td>
+      <td>${g.multi}</td>
+      <td>${avg(g.proc)}</td>
+      <td>${avg(g.handoff)}</td>
+      <td>${avg(g.late)}</td>`;
+    tbody.appendChild(tr);
+  }
+  setText('cntBench', list.length);
+}
+
+/* ===========================
    Playbooks rendering
    =========================== */
 function renderPlaybooks() {
@@ -853,7 +1046,7 @@ function renderPlaybooks() {
 }
 
 /* ===========================
-   Editor Helpers (new)
+   Dataset text helpers
    =========================== */
 function recordsToJsonText() {
   return safeJsonStringify(STCDP.records);
@@ -880,6 +1073,9 @@ function recordsToXmlText() {
     <expectedAt>${esc(r.expectedAt)}</expectedAt>
     <receivedAt>${esc(r.receivedAt)}</receivedAt>
     <reportedAt>${esc(r.reportedAt)}</reportedAt>
+    <bench>${esc(r.bench)}</bench>
+    <benchReceivedAt>${esc(r.benchReceivedAt)}</benchReceivedAt>
+    <testCount>${esc(r.testCount)}</testCount>
   </sample>`.trim()).join('\n  ');
   return `<samples>\n  ${rows}\n</samples>\n`;
 }
@@ -1202,6 +1398,14 @@ function init() {
     document.querySelector('input[name="format"][value="json"]').checked = true;
     document.getElementById('inputData').value = JSON_EXAMPLE_TEXT;
   });
+  document.getElementById('btnLoadLarge').addEventListener('click', () => {
+    STCDP.inputFormat = 'json';
+    document.querySelector('input[name="format"][value="json"]').checked = true;
+    document.getElementById('inputData').value = (typeof LARGE_SAMPLE_TEXT === 'string') ? LARGE_SAMPLE_TEXT : '';
+    document.getElementById('intakeSummary').textContent = typeof LARGE_SAMPLE_TEXT === 'string'
+      ? 'Loaded the large simulated sample (300 records). Click Intake & Validate.'
+      : 'sample_data_large.js not found. Run generate_sample_data.py first.';
+  });
   document.getElementById('btnLoadXml').addEventListener('click', () => {
     STCDP.inputFormat = 'xml';
     document.querySelector('input[name="format"][value="xml"]').checked = true;
@@ -1263,74 +1467,25 @@ function init() {
   renderPlaybooks();
   document.getElementById('tblErrors').addEventListener('click', onClickPlaybook);
 
-  /* ===== Editor wiring ===== */
-  document.getElementById('btnShowCurrent').addEventListener('click', () => {
-    const fmt = document.querySelector('input[name="editorFormat"]:checked').value;
-    const text = (fmt === 'xml') ? recordsToXmlText() : recordsToJsonText();
-    document.getElementById('editorText').value = text;
-    document.getElementById('editorSummary').textContent = `Rendered current dataset as ${fmt.toUpperCase()}.`;
-  });
-
-  document.getElementById('btnBeautify').addEventListener('click', () => {
-    const fmt = document.querySelector('input[name="editorFormat"]:checked').value;
-    const el = document.getElementById('editorText');
-    const raw = el.value.trim();
-    try {
-      if (fmt === 'json') {
-        const obj = JSON.parse(raw);
-        el.value = JSON.stringify(obj, null, 2);
-      } else {
-        // Naive pretty for XML: reparse and serialize via DOM
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(raw, 'application/xml');
-        const err = xml.querySelector('parsererror');
-        if (err) throw new Error('XML parse error');
-        const serializer = new XMLSerializer();
-        const pretty = serializer.serializeToString(xml);
-        el.value = pretty;
-      }
-      document.getElementById('editorSummary').textContent = 'Beautified successfully.';
-    } catch (e) {
-      document.getElementById('editorSummary').textContent = `Beautify failed: ${e.message}`;
-    }
-  });
-
+  /* ===== Open file / Download (on Intake) ===== */
   document.getElementById('filePicker').addEventListener('change', ev => {
     const file = ev.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result || '');
-      document.getElementById('editorText').value = text;
-      // Guess format by extension
       const isXml = /\.xml$/i.test(file.name);
-      document.querySelector(`input[name="editorFormat"][value="${isXml ? 'xml' : 'json'}"]`).checked = true;
-      document.getElementById('editorSummary').textContent = `Loaded ${file.name} (${text.length} bytes)`;
+      STCDP.inputFormat = isXml ? 'xml' : 'json';
+      document.querySelector(`input[name="format"][value="${isXml ? 'xml' : 'json'}"]`).checked = true;
+      document.getElementById('inputData').value = String(reader.result || '');
+      document.getElementById('intakeSummary').textContent = `Loaded ${file.name}. Click Intake & Validate.`;
     };
     reader.readAsText(file);
   });
 
-  document.getElementById('btnApplyEditor').addEventListener('click', () => {
-    const fmt = document.querySelector('input[name="editorFormat"]:checked').value;
-    const raw = document.getElementById('editorText').value.trim();
-    if (!raw) {
-      document.getElementById('editorSummary').textContent = 'Nothing to apply.';
-      return;
-    }
-    const res = intakeAndValidate(raw, fmt);
-    document.getElementById('editorSummary').textContent = res.ok ? `Applied: ${res.message}` : `Apply failed: ${res.message}`;
-    renderValidation();
-    renderResults();
-    renderAudit();
-    renderDashboard();
-    switchTab('validate');
-  });
-
   document.getElementById('btnDownloadCurrent').addEventListener('click', () => {
-    const fmt = document.querySelector('input[name="editorFormat"]:checked').value;
-    const text = (fmt === 'xml') ? recordsToXmlText() : recordsToJsonText();
-    const ext = (fmt === 'xml') ? 'xml' : 'json';
-    download(`clsdw_dataset_${STCDP.runId}.${ext}`, text, (fmt === 'xml') ? 'application/xml' : 'application/json');
+    const isXml = STCDP.inputFormat === 'xml';
+    const text = isXml ? recordsToXmlText() : recordsToJsonText();
+    download(`clsdw_dataset_${STCDP.runId}.${isXml ? 'xml' : 'json'}`, text, isXml ? 'application/xml' : 'application/json');
   });
 
   /* ===== New Entry wiring ===== */
@@ -1341,10 +1496,9 @@ function init() {
     const status = document.getElementById('newStatus').value.trim().toUpperCase();
     const valueNum = Number(document.getElementById('newValue').value);
     const unit = document.getElementById('newUnit').value.trim();
-    const dtLocal = document.getElementById('newCollected').value; // yyyy-MM-ddTHH:mm
-    const collectedAt = dtLocal ? new Date(dtLocal).toISOString().replace(/\.\d{3}Z$/, 'Z') : '';
+    const getTs = base => estToIso(document.getElementById(base + 'Date').value, document.getElementById(base + 'Time').value);
+    const collectedAt = getTs('newCollected');
     const accession = document.getElementById('newAccession').value.trim().toUpperCase();
-    const toIso = v => v ? new Date(v).toISOString().replace(/\.\d{3}Z$/, 'Z') : '';
     const result = document.getElementById('newResult').value.trim().toUpperCase();
     const test = document.getElementById('newTest').value.trim();
     const age = document.getElementById('newAge').value;
@@ -1352,11 +1506,14 @@ function init() {
     const sex = document.getElementById('newSex').value;
     const context = document.getElementById('newContext').value;
     const priority = document.getElementById('newPriority').value.trim().toUpperCase();
-    const expectedAt = toIso(document.getElementById('newExpected').value);
-    const receivedAt = toIso(document.getElementById('newReceived').value);
-    const reportedAt = toIso(document.getElementById('newReported').value);
+    const expectedAt = getTs('newExpected');
+    const receivedAt = getTs('newReceived');
+    const reportedAt = getTs('newReported');
+    const bench = document.getElementById('newBench').value;
+    const testCount = document.getElementById('newTestCount').value || 1;
+    const benchReceivedAt = getTs('newBenchReceived');
 
-    const newRec = normalizeRecord({ id, patientId, specimenType, status, value: valueNum, unit, collectedAt, accession, test, sex, age, ascvdRisk, context, result, priority, expectedAt, receivedAt, reportedAt, source: 'json' });
+    const newRec = normalizeRecord({ id, patientId, specimenType, status, value: valueNum, unit, collectedAt, accession, test, sex, age, ascvdRisk, context, result, priority, expectedAt, receivedAt, reportedAt, bench, benchReceivedAt, testCount, source: 'json' });
     const current = STCDP.records.slice();
     current.push(newRec);
     const res = intakeAndValidate(safeJsonStringify(current), 'json'); // re-run through intake pipeline
@@ -1391,7 +1548,7 @@ document.addEventListener('DOMContentLoaded', init);
    Notes
    - CSS/JS prefixed classes to avoid collisions
    - No external assets; CSP self-only
-   - Editor supports load/apply/download for JSON/XML
+   - Intake supports open file and download for JSON/XML
    - Dashboard anim honors toggle and prefers-reduced-motion
    =========================== */
 ``
