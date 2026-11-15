@@ -212,3 +212,6 @@ figcaption { color: var(--muted); margin-bottom: 6px; }
     * { transition: none !important; animation: none !important; }
     .clsdw-dash-anim { animation: none !important; }
 }
+
+/* Charts scale to their column */
+canvas { max-width: 100%; height: auto; }
