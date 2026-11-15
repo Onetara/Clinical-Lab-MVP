@@ -107,13 +107,44 @@
                         <input id="newPatientId" class="stcdp-input" placeholder="PAT-101" />
                     </div>
                     <div>
-                        <label class="stcdp-label" for="newSpecimen">Specimen Type</label>
+                        <label class="stcdp-label" for="newSpecimen">Specimen (Sample) Type</label>
                         <select id="newSpecimen" class="stcdp-input">
                             <option>BLOOD</option>
                             <option>URINE</option>
                             <option>SWAB</option>
                             <option>SALIVA</option>
                             <option>PLASMA</option>
+                            <option>SERUM</option>
+                            <option>CSF</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newTest">Test (Analyte)</label>
+                        <input id="newTest" class="stcdp-input" list="testList" placeholder="Sodium" autocomplete="off" />
+                        <datalist id="testList"></datalist>
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newSex">Patient Sex</label>
+                        <select id="newSex" class="stcdp-input">
+                            <option value="">(not given)</option>
+                            <option value="M">Male</option>
+                            <option value="F">Female</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newAge">Age (years)</label>
+                        <input id="newAge" type="number" min="0" max="120" step="1" class="stcdp-input" placeholder="45" />
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newRisk">10-year heart risk (from PREVENT calculator; for LDL goals)</label>
+                        <select id="newRisk" class="stcdp-input">
+                            <option value="">(not given)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newContext">Context (when the range depends on it)</label>
+                        <select id="newContext" class="stcdp-input">
+                            <option value="">(none)</option>
                         </select>
                     </div>
                     <div>
@@ -130,12 +161,8 @@
                     </div>
                     <div>
                         <label class="stcdp-label" for="newUnit">Unit</label>
-                        <select id="newUnit" class="stcdp-input">
-                            <option>MG/DL</option>
-                            <option>MMOL/L</option>
-                            <option>IU/L</option>
-                            <option>CELLS/µL</option>
-                        </select>
+                        <input id="newUnit" class="stcdp-input" list="unitList" placeholder="mg/dL" autocomplete="off" />
+                        <datalist id="unitList"></datalist>
                     </div>
                     <div>
                         <label class="stcdp-label" for="newCollected">Collected At</label>
@@ -144,6 +171,32 @@
                     <div>
                         <label class="stcdp-label" for="newAccession">Accession</label>
                         <input id="newAccession" class="stcdp-input" placeholder="ACC-2026-0301" />
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newResult">Result (calculated automatically; pick Inconclusive only if the lab could not decide)</label>
+                        <select id="newResult" class="stcdp-input">
+                            <option value="">(calculate from reference range)</option>
+                            <option value="INCONCLUSIVE">Inconclusive (Unclear)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newPriority">Priority</label>
+                        <select id="newPriority" class="stcdp-input">
+                            <option value="ROUTINE">Routine</option>
+                            <option value="STAT">STAT (Urgent)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newExpected">Expected Arrival</label>
+                        <input id="newExpected" type="datetime-local" class="stcdp-input" />
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newReceived">Actual Arrival</label>
+                        <input id="newReceived" type="datetime-local" class="stcdp-input" />
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newReported">Result Reported At</label>
+                        <input id="newReported" type="datetime-local" class="stcdp-input" />
                     </div>
                 </div>
 
@@ -217,6 +270,21 @@
                     <button id="btnProcess" type="button" class="stcdp-btn stcdp-btn--primary">Process Valid Records</button>
                 </div>
                 <div id="processSummary" class="stcdp-summary" role="status" aria-live="polite"></div>
+
+                <details class="stcdp-details" open>
+                    <summary>Result check (Reference range): Normal (In range) / Abnormal (Out of range)</summary>
+                    <p class="stcdp-help">Calculated for REPORTED samples from the NBME reference ranges. Replaces any typed result.</p>
+                    <div class="stcdp-tablewrap">
+                        <table class="stcdp-table" aria-label="Computed results">
+                            <thead>
+                                <tr>
+                                    <th>#</th><th>Record ID</th><th>Test</th><th>Value</th><th>Reference range</th><th>Result</th><th>High / Low</th><th>Typed result</th><th>Diagnostic category (Guideline)</th><th>Guideline source</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblResults"></tbody>
+                        </table>
+                    </div>
+                </details>
             </div>
         </section>
 
@@ -224,25 +292,27 @@
         <section id="stcdp-panel-reconcile" class="stcdp-panel stcdp-hidden" aria-labelledby="reconcile">
             <div class="stcdp-card">
                 <h2>Reconciliation</h2>
-                <p>Simulated downstream ACKs (e.g., LIS/LIMS acks) with SLA enforcement (configurable threshold).</p>
+                <p>Simulated ACKs (Receipts) from lab software (LIS/LIMS), plus SLA (Deadline) check using real wait time (TAT): result reported minus sample arrival.</p>
                 <div class="stcdp-row">
-                    <label class="stcdp-label" for="slaMs">SLA Threshold (ms)</label>
-                    <input id="slaMs" class="stcdp-input" type="number" value="1500" min="100" step="100" />
+                    <label class="stcdp-label" for="slaStatHours">STAT (Urgent) SLA (Deadline), hours</label>
+                    <input id="slaStatHours" class="stcdp-input" type="number" value="48" min="1" step="1" />
+                    <label class="stcdp-label" for="slaRoutineHours">Routine SLA (Deadline), hours</label>
+                    <input id="slaRoutineHours" class="stcdp-input" type="number" value="168" min="1" step="1" />
                     <button id="btnReconcile" type="button" class="stcdp-btn stcdp-btn--primary">Run Reconciliation</button>
                 </div>
 
                 <div class="stcdp-grid">
-                    <div class="stcdp-kpi"><div class="stcdp-kpi__label">ACKed</div><div id="kpiAck" class="stcdp-kpi__value stcdp-ok">0</div></div>
-                    <div class="stcdp-kpi"><div class="stcdp-kpi__label">SLA Breaches</div><div id="kpiSla" class="stcdp-kpi__value stcdp-bad">0</div></div>
+                    <div class="stcdp-kpi"><div class="stcdp-kpi__label">ACK (Receipt) OK</div><div id="kpiAck" class="stcdp-kpi__value stcdp-ok">0</div></div>
+                    <div class="stcdp-kpi"><div class="stcdp-kpi__label">SLA breach (Missed deadline)</div><div id="kpiSla" class="stcdp-kpi__value stcdp-bad">0</div></div>
                 </div>
 
                 <details class="stcdp-details">
-                    <summary>ACK Details</summary>
+                    <summary>ACK (Receipt) Details</summary>
                     <div class="stcdp-tablewrap">
-                        <table class="stcdp-table" aria-label="Reconciliation acks">
+                        <table class="stcdp-table" aria-label="Reconciliation ACK (Receipt) results">
                             <thead>
                                 <tr>
-                                    <th>#</th><th>Record ID</th><th>Status</th><th>ACK Code</th><th>Delay (ms)</th><th>SLA</th>
+                                    <th>#</th><th>Record ID</th><th>ACK (Receipt)</th><th>ACK Code</th><th>Priority</th><th>Wait time (TAT), hrs</th><th>Deadline, hrs</th><th>SLA (Deadline)</th>
                                 </tr>
                             </thead>
                             <tbody id="tblAcks"></tbody>
@@ -256,16 +326,16 @@
         <section id="stcdp-panel-audit" class="stcdp-panel stcdp-hidden" aria-labelledby="audit">
             <div class="stcdp-card">
                 <h2>Audit & Provenance</h2>
-                <p>End-to-end activity with CRC32 checksums and run IDs. Export as CSV or copy JSON.</p>
+                <p>End-to-end activity with CRC32 (Checksum) values and run IDs. Export as CSV (Spreadsheet) or copy JSON.</p>
                 <div class="stcdp-actions">
-                    <button id="btnExportAudit" type="button" class="stcdp-btn">Export Audit CSV</button>
+                    <button id="btnExportAudit" type="button" class="stcdp-btn">Export Audit CSV (Spreadsheet)</button>
                     <button id="btnCopyAudit" type="button" class="stcdp-btn stcdp-btn--ghost">Copy Audit as JSON</button>
                 </div>
                 <div class="stcdp-tablewrap">
                     <table class="stcdp-table" aria-label="Audit log">
                         <thead>
                             <tr>
-                                <th>#</th><th>Time</th><th>Run ID</th><th>Stage</th><th>Record ID</th><th>Status</th><th>CRC32</th><th>Notes</th>
+                                <th>#</th><th>Time</th><th>Run ID</th><th>Stage</th><th>Record ID</th><th>Status</th><th>CRC32 (Checksum)</th><th>Notes</th>
                             </tr>
                         </thead>
                         <tbody id="tblAudit"></tbody>
@@ -293,31 +363,52 @@
 
                 <div class="stcdp-grid stcdp-grid--cards">
                     <div class="stcdp-card stcdp-card--tile clsdw-hover-tilt">
-                        <div class="stcdp-card__title">Error Rate</div>
+                        <div class="stcdp-card__title">Error rate (Failure rate)</div>
                         <div id="metricErrorRate" class="stcdp-metric">0%</div>
                     </div>
                     <div class="stcdp-card stcdp-card--tile clsdw-hover-tilt">
-                        <div class="stcdp-card__title">SLA Breach Rate</div>
+                        <div class="stcdp-card__title">SLA breach (Missed deadline) rate</div>
                         <div id="metricSlaRate" class="stcdp-metric">0%</div>
                     </div>
                     <div class="stcdp-card stcdp-card--tile clsdw-hover-tilt">
-                        <div class="stcdp-card__title">Quarantine Size</div>
+                        <div class="stcdp-card__title">Average TAT (Wait time)</div>
+                        <div id="metricAvgWait" class="stcdp-metric">n/a</div>
+                    </div>
+                    <div class="stcdp-card stcdp-card--tile clsdw-hover-tilt">
+                        <div class="stcdp-card__title">Quarantine (On hold) size</div>
                         <div id="metricQuarantine" class="stcdp-metric">0</div>
                     </div>
                     <div class="stcdp-card stcdp-card--tile clsdw-hover-tilt">
-                        <div class="stcdp-card__title">Throughput (records)</div>
+                        <div class="stcdp-card__title">Throughput (Daily output): results per day</div>
                         <div id="metricThroughput" class="stcdp-metric">0</div>
+                    </div>
+                    <div class="stcdp-card stcdp-card--tile clsdw-hover-tilt">
+                        <div class="stcdp-card__title">On-time delivery (Arrived as expected)</div>
+                        <div id="metricOnTime" class="stcdp-metric">n/a</div>
+                    </div>
+                    <div class="stcdp-card stcdp-card--tile clsdw-hover-tilt">
+                        <div class="stcdp-card__title">Average lateness of late samples</div>
+                        <div id="metricAvgLate" class="stcdp-metric">n/a</div>
                     </div>
                 </div>
 
                 <div class="stcdp-charts">
                     <figure>
-                        <figcaption>Error Categories</figcaption>
-                        <canvas id="chartErrors" width="520" height="220" aria-label="Error category bars"></canvas>
+                        <figcaption>Results: Normal (In range) / Abnormal (Out of range) / Inconclusive (Unclear)</figcaption>
+                        <canvas id="chartResults" width="520" height="240" aria-label="Result counts"></canvas>
                     </figure>
                     <figure>
-                        <figcaption>ACK Delay Distribution</figcaption>
-                        <canvas id="chartAckDelays" width="520" height="220" aria-label="Ack delay histogram"></canvas>
+                        <figcaption>TAT (Wait time) Distribution, hours from arrival to result</figcaption>
+                        <canvas id="chartWait" width="520" height="240" aria-label="Wait time histogram"></canvas>
+                    </figure>
+                    <figure>
+                        <figcaption>Bottleneck (Slowdown): average hours late, by Specimen (Sample) type</figcaption>
+                        <canvas id="chartDelivery" width="520" height="240" aria-label="Delivery delay by specimen type"></canvas>
+                    </figure>
+                    <figure>
+                        <figcaption>Error Categories</figcaption>
+                        <canvas id="chartErrors" width="520" height="240" aria-label="Error category bars"></canvas>
+                        <ul id="errorLegend" class="stcdp-help" style="margin:8px 0 0 18px; padding:0;"></ul>
                     </figure>
                 </div>
             </div>
@@ -337,6 +428,8 @@
         <small>© <span id="year"></span> Stacy Toriola. CLSDW — Clinical Lab & Sample Data Workflows.</small>
     </footer>
 
+    <script src="reference_ranges.js"></script>
+    <script src="diagnostic_criteria.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
