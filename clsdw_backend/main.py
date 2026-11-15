@@ -1,5 +1,5 @@
 """
-main.py — CLSDW FastAPI Backend
+main.py: CLSDW FastAPI Backend
 Exposes REST endpoints that mirror every operation in app.js.
 
 Session model: each POST /intake creates a new run and returns a run_id.
@@ -58,7 +58,7 @@ from clsdw_core import (
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="CLSDW — Clinical Lab & Sample Data Workflows API",
+    title="CLSDW: Clinical Lab & Sample Data Workflows API",
     description="Python backend for the CLSDW frontend (mirrors app.js logic)",
     version="2.0.0",
 )

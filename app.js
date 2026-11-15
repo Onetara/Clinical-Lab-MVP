@@ -850,7 +850,7 @@ function renderErrorLegend(entries) {
   for (const [code, n] of entries) {
     const meta = ERROR_BOOK[code];
     const li = document.createElement('li');
-    li.innerHTML = `<strong>${escapeHtml(code)}</strong> — ${escapeHtml(meta ? `${meta.title} (${meta.short})` : 'See playbook')}: ${n}`;
+    li.innerHTML = `<strong>${escapeHtml(code)}</strong>, ${escapeHtml(meta ? `${meta.title} (${meta.short})` : 'See playbook')}: ${n}`;
     host.appendChild(li);
   }
 }
@@ -1031,7 +1031,7 @@ function renderPlaybooks() {
     const det = document.createElement('details');
     det.id = `playbook-${code}`;
     const summary = document.createElement('summary');
-    summary.innerHTML = `<strong>${code}</strong> — ${escapeHtml(meta.title)} (${escapeHtml(meta.short)})`;
+    summary.innerHTML = `<strong>${code}</strong>: ${escapeHtml(meta.title)} (${escapeHtml(meta.short)})`;
     det.appendChild(summary);
 
     const ul = document.createElement('ol');

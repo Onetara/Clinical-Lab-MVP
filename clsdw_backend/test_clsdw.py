@@ -1,5 +1,5 @@
 """
-test_clsdw.py — CLSDW Backend Test Suite
+test_clsdw.py: CLSDW Backend Test Suite
 Tests core logic, API endpoints, edge cases, and parity with JS behavior.
 
 Run with:  python -m pytest test_clsdw.py -v
@@ -474,7 +474,7 @@ class TestReconciliation:
 
     def test_sla_metrics_counted(self):
         state = self._full_pipeline()
-        reconcile_records(state, sla_ms=200)  # very tight — lots of breaches
+        reconcile_records(state, sla_ms=200)  # very tight, lots of breaches
         assert state.metrics["slaBreaches"] >= 0
         assert state.metrics["acked"] >= 0
 

@@ -1,5 +1,5 @@
 """
-clsdw_core.py — Clinical Lab & Sample Data Workflows: Python Logic Backend
+clsdw_core.py: Clinical Lab & Sample Data Workflows: Python Logic Backend
 Mirrors app.js (Stacy Toriola / Anthony O.) deterministically.
 
 All business rules replicated:
@@ -34,7 +34,7 @@ from diagnostic_criteria import ASCVD_RISK_LABEL, diagnose_record
 
 
 # ---------------------------------------------------------------------------
-# CRC32 (IEEE 802.3) — matches JS implementation exactly
+# CRC32 (IEEE 802.3), matches JS implementation exactly
 # ---------------------------------------------------------------------------
 
 def _build_crc32_table() -> list[int]:
@@ -66,7 +66,7 @@ def crc32_hex(s: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Mulberry32 PRNG — matches JS implementation exactly
+# Mulberry32 PRNG, matches JS implementation exactly
 # ---------------------------------------------------------------------------
 
 def mulberry32_factory(seed: int):
@@ -116,7 +116,7 @@ def now_iso() -> str:
 # ---------------------------------------------------------------------------
 
 def safe_json_stringify(obj: Any) -> str:
-    """Mirrors JS safeJsonStringify — sorted keys, 2-space indent."""
+    """Mirrors JS safeJsonStringify, sorted keys, 2-space indent."""
     return json.dumps(obj, sort_keys=True, indent=2, ensure_ascii=False)
 
 
@@ -131,7 +131,7 @@ VALID_STATUS = {"RECEIVED", "IN_PROGRESS", "REPORTED"}
 
 
 def _safe_upper(s: str) -> str:
-    """Uppercase ASCII chars only — matches JS V8 toUpperCase() for non-ASCII like µ."""
+    """Uppercase ASCII chars only, matches JS V8 toUpperCase() for non-ASCII like µ."""
     return "".join(c.upper() if c.isascii() else c for c in s)
 
 
@@ -396,7 +396,7 @@ def validate_records(records: list[dict], state: "CLSDWState") -> dict:
             state.errors.append({"idx": idx, "id": record_id, "code": code, "message": message, "field": field})
             state.metrics["errorByCode"][code] = state.metrics["errorByCode"].get(code, 0) + 1
 
-        # E001 — Required fields
+        # E001: Required fields
         for f in required_fields:
             val = r.get(f)
             missing = (
@@ -407,7 +407,7 @@ def validate_records(records: list[dict], state: "CLSDWState") -> dict:
             if missing:
                 add_err("E001", f"Required field '{f}' is missing", f)
 
-        # E002 — Enumerations
+        # E002: Enumerations
         if r["specimenType"] and r["specimenType"] not in VALID_SPECIMEN:
             add_err("E002", f"Invalid specimenType '{r['specimenType']}'", "specimenType")
         if r["status"] and r["status"] not in VALID_STATUS:
@@ -431,7 +431,7 @@ def validate_records(records: list[dict], state: "CLSDWState") -> dict:
             elif age < 0 or age > 120:
                 add_err("E003", f"Age out of range: {age}", "age")
 
-        # E003 — Value range
+        # E003: Value range
         v = r["value"]
         if isinstance(v, float) and not math.isnan(v):
             if v < 0:
@@ -439,7 +439,7 @@ def validate_records(records: list[dict], state: "CLSDWState") -> dict:
             if v > 1_000_000:
                 add_err("E003", f"Value out of range: {v}", "value")
 
-        # E005 — REPORTED plausibility (mirrors JS condition exactly)
+        # E005: REPORTED plausibility (mirrors JS condition exactly)
         # JS: if (r.status === 'REPORTED' && !(typeof r.value === 'number') || Number.isNaN(r.value))
         # Due to JS operator precedence this is: (status=REPORTED AND NOT number) OR isNaN
         is_nan_val = isinstance(r["value"], float) and math.isnan(r["value"])
@@ -473,7 +473,7 @@ def validate_records(records: list[dict], state: "CLSDWState") -> dict:
             if t_p and t_p < t_b:
                 add_err("E004", "reportedAt is before benchReceivedAt", "reportedAt")
 
-        # E007 — Format checks
+        # E007: Format checks
         if r["id"] and not id_pattern(r["id"]):
             add_err("E007", "Invalid id format", "id")
         if r["accession"] and not accession_pattern(r["accession"]):
@@ -481,7 +481,7 @@ def validate_records(records: list[dict], state: "CLSDWState") -> dict:
         if r["collectedAt"] and not is_iso_date(r["collectedAt"]):
             add_err("E007", "Invalid ISO timestamp (collectedAt)", "collectedAt")
 
-        # E004 + E003 — Timestamp checks
+        # E004 + E003: Timestamp checks
         if is_iso_date(r["collectedAt"]):
             try:
                 dt = datetime.fromisoformat(r["collectedAt"].replace("Z", "+00:00"))
@@ -497,7 +497,7 @@ def validate_records(records: list[dict], state: "CLSDWState") -> dict:
             except (ValueError, OverflowError):
                 add_err("E007", "Unparseable collectedAt", "collectedAt")
 
-        # E006 — Duplicate check
+        # E006: Duplicate check
         dedup_key = f"{r['id']}::{r['accession'] or ''}"
         if dedup_key in seen_key:
             add_err("E006", "Duplicate id+accession", "id/accession")

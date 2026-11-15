@@ -1,6 +1,6 @@
 # CLSDW Python Backend
 
-**Clinical Lab & Sample Data Workflows — Python/FastAPI Backend**
+**Clinical Lab & Sample Data Workflows: Python/FastAPI Backend**
 *Logic-complete backend for the CLSDW frontend (mirrors app.js by Stacy Toriola)*
 
 ---
@@ -9,12 +9,12 @@
 
 | File | Purpose |
 |------|---------|
-| `clsdw_core.py` | All business logic — CRC32, Mulberry32 PRNG, normalization, validation (E001–E010), processing, reconciliation, audit, lab-time and delivery metrics, bench shifts |
+| `clsdw_core.py` | All business logic: CRC32, Mulberry32 PRNG, normalization, validation (E001–E010), processing, reconciliation, audit, lab-time and delivery metrics, bench shifts |
 | `reference_ranges.py` + `reference_ranges.json` | NBME reference ranges and the rule that computes each result (Normal, Abnormal, Borderline, ...), unit matching included |
 | `diagnostic_criteria.py` | Guideline categories: ADA 2026 glucose and A1c, WHO 2024 hemoglobin, 2026 ACC/AHA LDL goal by entered risk |
 | `schema.sql` | PostgreSQL (Supabase-style) schema: tables, checks, and views that reproduce the dashboard and the Raw vs Fair bench numbers in SQL |
-| `main.py` | FastAPI REST API — exposes every workflow operation as an HTTP endpoint |
-| `test_clsdw.py` | 136 pytest tests — unit, integration, end-to-end, API |
+| `main.py` | FastAPI REST API: exposes every workflow operation as an HTTP endpoint |
+| `test_clsdw.py` | 136 pytest tests: unit, integration, end-to-end, API |
 | `requirements.txt` | Pinned Python dependencies |
 
 ---
@@ -48,11 +48,11 @@ Interactive docs auto-generated at: `http://127.0.0.1:8000/docs`
 ### Prerequisites (already installed per your setup)
 - Python 3.10+ (verify: `python --version`)
 - pip (verify: `pip --version`)
-- A terminal — PowerShell, Windows Terminal, or CMD all work
+- A terminal: PowerShell, Windows Terminal, or CMD all work
 
 ---
 
-### Step 1 — Open a terminal in the project folder
+### Step 1: Open a terminal in the project folder
 
 ```powershell
 # Navigate to wherever you extracted the zip
@@ -61,7 +61,7 @@ cd C:\path\to\clsdw_backend
 
 ---
 
-### Step 2 — Create and activate a virtual environment
+### Step 2: Create and activate a virtual environment
 
 ```powershell
 # Create the venv (only needed once)
@@ -80,7 +80,7 @@ You'll see `(.venv)` prepend your prompt when active.
 
 ---
 
-### Step 3 — Install dependencies
+### Step 3: Install dependencies
 
 ```powershell
 pip install -r requirements.txt
@@ -93,7 +93,7 @@ Successfully installed fastapi-0.115.12 uvicorn-0.34.3 ...
 
 ---
 
-### Step 4 — Run the tests
+### Step 4: Run the tests
 
 ```powershell
 python -m pytest test_clsdw.py -v
@@ -108,7 +108,7 @@ python -m pytest test_clsdw.py --tb=short -q
 
 ---
 
-### Step 5 — Start the API server
+### Step 5: Start the API server
 
 ```powershell
 uvicorn main:app --reload --host 127.0.0.1 --port 8000
@@ -125,7 +125,7 @@ INFO:     Application startup complete.
 
 ---
 
-### Step 6 — Explore the interactive API docs
+### Step 6: Explore the interactive API docs
 
 Open your browser and go to:
 
@@ -133,7 +133,7 @@ Open your browser and go to:
 http://127.0.0.1:8000/docs
 ```
 
-This opens Swagger UI — you can run every endpoint directly from the browser without any extra tool.
+This opens Swagger UI, you can run every endpoint directly from the browser without any extra tool.
 
 Alternatively, the ReDoc view is at:
 ```
@@ -142,7 +142,7 @@ http://127.0.0.1:8000/redoc
 
 ---
 
-### Step 7 — Try a quick end-to-end test with curl (optional)
+### Step 7: Try a quick end-to-end test with curl (optional)
 
 Open a *second* terminal (with the venv activated) while the server is running:
 
@@ -150,7 +150,7 @@ Open a *second* terminal (with the venv activated) while the server is running:
 # Health check
 curl http://127.0.0.1:8000/health
 
-# Full pipeline with example JSON (inline — PowerShell escape)
+# Full pipeline with example JSON (inline: PowerShell escape)
 $body = '{
   "format": "json",
   "data": "[{\"id\":\"SMP-1001\",\"patientId\":\"PAT-001\",\"specimenType\":\"BLOOD\",\"status\":\"RECEIVED\",\"value\":85.2,\"unit\":\"MG/DL\",\"collectedAt\":\"2026-01-15T09:00:00Z\",\"accession\":\"ACC-2026-0001\"}]"
@@ -164,7 +164,7 @@ Or use the Swagger UI at `/docs` which is much easier for exploratory testing.
 
 ---
 
-### Step 8 — Serve the frontend alongside the backend (optional)
+### Step 8: Serve the frontend alongside the backend (optional)
 
 The original `index.html` / `styles.css` / `app.js` are self-contained and work without the backend. To serve them from the same origin (useful if you integrate the API calls):
 
@@ -178,7 +178,7 @@ Backend: `http://127.0.0.1:8000`
 
 ---
 
-## Using the API — Workflow walkthrough
+## Using the API: Workflow walkthrough
 
 ### Option A: Step-by-step (mirrors frontend tabs)
 

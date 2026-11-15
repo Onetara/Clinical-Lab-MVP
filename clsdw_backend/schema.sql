@@ -1,29 +1,29 @@
--- CLSDW: Clinical Lab & Sample Data Workflows
--- PostgreSQL schema (tested on PostgreSQL 16; also fits Supabase).
---
--- Idea: the Python backend validates records, then stores them here. The views at the bottom
--- calculate the same efficiency numbers as the browser app and the API, straight from SQL:
---   v_dashboard        error rate, SLA breach rate, TAT (Lab time), throughput, delivery
---   v_delivery_by_specimen   late delivery vs lab time per specimen type
---   v_result_counts    Normal / Abnormal / ... counts
---   v_bench_shift      Relative efficiency (Raw) vs True efficiency (Fair) per bench and shift
---
--- All data is synthetic. Real patient data would need HIPAA controls (encryption, access control, audit).
--- Times are stored as timestamptz (UTC). Shifts use a fixed UTC-5 clock ("EST"):
---   Night 0000-0800, Morning 0800-1600, Afternoon 1600-0000.
--- Reference ranges (NBME) and guideline categories (ADA, WHO, ACC/AHA) are applied by the app / backend;
--- this schema stores the computed result next to each record.
+/* CLSDW: Clinical Lab & Sample Data Workflows */
+/* PostgreSQL schema (tested on PostgreSQL 16; also fits Supabase). */
+
+/* Idea: the Python backend validates records, then stores them here. The views at the bottom */
+/* calculate the same efficiency numbers as the browser app and the API, straight from SQL: */
+/*   v_dashboard        error rate, SLA breach rate, TAT (Lab time), throughput, delivery */
+/*   v_delivery_by_specimen   late delivery vs lab time per specimen type */
+/*   v_result_counts    Normal / Abnormal / ... counts */
+/*   v_bench_shift      Relative efficiency (Raw) vs True efficiency (Fair) per bench and shift */
+
+/* All data is synthetic. Real patient data would need HIPAA controls (encryption, access control, audit). */
+/* Times are stored as timestamptz (UTC). Shifts use a fixed UTC-5 clock ("EST"): */
+/*   Night 0000-0800, Morning 0800-1600, Afternoon 1600-0000. */
+/* Reference ranges (NBME) and guideline categories (ADA, WHO, ACC/AHA) are applied by the app / backend; */
+/* this schema stores the computed result next to each record. */
 
 BEGIN;
 
--- ---------------------------------------------------------------------------
--- Lookup tables
--- ---------------------------------------------------------------------------
+/* =========================================================================== */
+/* Lookup tables */
+/* =========================================================================== */
 
 CREATE TABLE error_codes (
     code   text PRIMARY KEY,
     title  text NOT NULL,
-    plain  text NOT NULL            -- short plain-language meaning
+    plain  text NOT NULL            /* short plain-language meaning */
 );
 
 INSERT INTO error_codes (code, title, plain) VALUES
@@ -37,14 +37,14 @@ INSERT INTO error_codes (code, title, plain) VALUES
     ('E009', 'XML Parse Error',        'Unreadable XML'),
     ('E010', 'JSON Parse Error',       'Unreadable JSON');
 
--- Deadline (SLA) in hours by priority. Project defaults; edit here to change every view.
+/* Deadline (SLA) in hours by priority. Project defaults; edit here to change every view. */
 CREATE TABLE deadlines (
     priority text PRIMARY KEY CHECK (priority IN ('STAT', 'ROUTINE')),
     hours    integer NOT NULL CHECK (hours > 0)
 );
 INSERT INTO deadlines (priority, hours) VALUES ('STAT', 48), ('ROUTINE', 168);
 
--- Which lab bench normally runs a test (used when a record has no bench).
+/* Which lab bench normally runs a test (used when a record has no bench). */
 CREATE TABLE test_bench (
     test_name text PRIMARY KEY CHECK (test_name = lower(test_name)),
     bench     text NOT NULL
@@ -57,9 +57,9 @@ INSERT INTO test_bench (test_name, bench) VALUES
     ('hemoglobin a1c', 'Hematology'), ('hemoglobin', 'Hematology'),
     ('leukocyte count', 'Hematology'), ('platelet count', 'Hematology');
 
--- ---------------------------------------------------------------------------
--- One row per intake run
--- ---------------------------------------------------------------------------
+/* =========================================================================== */
+/* One row per intake run */
+/* =========================================================================== */
 
 CREATE TABLE runs (
     run_id       text PRIMARY KEY,
@@ -71,9 +71,9 @@ CREATE TABLE runs (
     quarantine   integer NOT NULL DEFAULT 0
 );
 
--- ---------------------------------------------------------------------------
--- Valid records (records that fail validation go to quarantine instead)
--- ---------------------------------------------------------------------------
+/* =========================================================================== */
+/* Valid records (records that fail validation go to quarantine instead) */
+/* =========================================================================== */
 
 CREATE TABLE specimens (
     specimen_pk       bigserial PRIMARY KEY,
@@ -89,19 +89,19 @@ CREATE TABLE specimens (
     unit              text NOT NULL,
     sex               text CHECK (sex IN ('M', 'F')),
     age               numeric CHECK (age >= 0 AND age <= 120),
-    ascvd_risk        text CHECK (ascvd_risk IN ('LOW', 'BORDERLINE', 'INTERMEDIATE', 'HIGH')),   -- 10-year heart risk, entered
+    ascvd_risk        text CHECK (ascvd_risk IN ('LOW', 'BORDERLINE', 'INTERMEDIATE', 'HIGH')),   /* 10-year heart risk, entered */
     context           text CHECK (context IN ('FASTING', 'RANDOM', 'PREMENOPAUSE', 'FOLLICULAR', 'MIDCYCLE', 'POSTMENOPAUSE',
                                               'PROVOCATIVE', 'MORNING_0800', 'AFTERNOON_1600', 'PREGNANT_T1', 'PREGNANT_T2', 'PREGNANT_T3')),
-    -- Timeline
+/* Timeline */
     collected_at      timestamptz NOT NULL,
-    expected_at       timestamptz,                 -- when the sample was due at the lab
-    received_at       timestamptz NOT NULL,        -- actual arrival at the lab (required)
-    bench_received_at timestamptz,                 -- when the bench got it (blank = same as received_at)
+    expected_at       timestamptz,                 /* when the sample was due at the lab */
+    received_at       timestamptz NOT NULL,        /* actual arrival at the lab (required) */
+    bench_received_at timestamptz,                 /* when the bench got it (blank = same as received_at) */
     reported_at       timestamptz,
-    -- Bench workload
-    bench             text,                        -- blank = worked out from the test (see v_specimens)
+/* Bench workload */
+    bench             text,                        /* blank = worked out from the test (see v_specimens) */
     test_count        integer NOT NULL DEFAULT 1 CHECK (test_count BETWEEN 1 AND 20),
-    -- Calculated by the app from the reference ranges (a typed result is replaced; INCONCLUSIVE is kept)
+/* Calculated by the app from the reference ranges (a typed result is replaced; INCONCLUSIVE is kept) */
     result            text CHECK (result IN ('NORMAL', 'ABNORMAL', 'INCONCLUSIVE', 'BORDERLINE', 'NO_RANGE',
                                              'UNIT_MISMATCH', 'SEX_NEEDED', 'CONTEXT_NEEDED')),
 
@@ -115,21 +115,21 @@ CREATE TABLE specimens (
 CREATE INDEX specimens_run_idx ON specimens (run_id);
 CREATE INDEX specimens_received_idx ON specimens (received_at);
 
--- Reference-range flag and guideline category for each REPORTED record
+/* Reference-range flag and guideline category for each REPORTED record */
 CREATE TABLE result_details (
     specimen_pk  bigint PRIMARY KEY REFERENCES specimens (specimen_pk) ON DELETE CASCADE,
-    typed_result text,              -- what the file said (replaced by the calculated result)
+    typed_result text,              /* what the file said (replaced by the calculated result) */
     flag         text CHECK (flag IN ('', 'HIGH', 'LOW')),
     range_text   text,
-    dx_code      text,              -- e.g. PREDIABETES, ANEMIA_MILD, LDL_ABOVE_GOAL
+    dx_code      text,              /* e.g. PREDIABETES, ANEMIA_MILD, LDL_ABOVE_GOAL */
     dx_label     text,
-    dx_source    text,              -- ADA, WHO or ACC/AHA guideline
+    dx_source    text,              /* ADA, WHO or ACC/AHA guideline */
     dx_note      text
 );
 
--- ---------------------------------------------------------------------------
--- Validation results and audit trail
--- ---------------------------------------------------------------------------
+/* =========================================================================== */
+/* Validation results and audit trail */
+/* =========================================================================== */
 
 CREATE TABLE validation_errors (
     error_pk  bigserial PRIMARY KEY,
@@ -141,7 +141,7 @@ CREATE TABLE validation_errors (
     field     text
 );
 
-CREATE TABLE quarantine (         -- On hold: failed validation, kept out of processing
+CREATE TABLE quarantine (         /* On hold: failed validation, kept out of processing */
     quarantine_pk bigserial PRIMARY KEY,
     run_id        text NOT NULL REFERENCES runs (run_id) ON DELETE CASCADE,
     row_idx       integer NOT NULL,
@@ -157,15 +157,15 @@ CREATE TABLE audit_log (
     stage     text NOT NULL,
     status    text,
     record_id text,
-    checksum  text NOT NULL,       -- CRC32 of run | stage | record | notes
+    checksum  text NOT NULL,       /* CRC32 of run | stage | record | notes */
     notes     text
 );
 
--- ---------------------------------------------------------------------------
--- Views: the same numbers as the browser app and the API
--- ---------------------------------------------------------------------------
+/* =========================================================================== */
+/* Views: the same numbers as the browser app and the API */
+/* =========================================================================== */
 
--- One row per valid record with the derived values every other view needs.
+/* One row per valid record with the derived values every other view needs. */
 CREATE VIEW v_specimens WITH (security_invoker = true) AS
 SELECT
     s.*,
@@ -178,10 +178,10 @@ SELECT
                  ELSE 'Unassigned'
              END)                                                              AS bench_name,
     coalesce(s.bench_received_at, s.received_at)                               AS bench_start,
-    -- Lab time (TAT): arrival to reported. Late delivery is not counted.
+/* Lab time (TAT): arrival to reported. Late delivery is not counted. */
     CASE WHEN s.status = 'REPORTED' AND s.reported_at IS NOT NULL
          THEN extract(epoch FROM (s.reported_at - s.received_at)) / 3600 END   AS lab_hours,
-    -- Delivery lateness: hours after the expected arrival (0 when on time or early)
+/* Delivery lateness: hours after the expected arrival (0 when on time or early) */
     CASE WHEN s.expected_at IS NOT NULL
          THEN greatest(0, extract(epoch FROM (s.received_at - s.expected_at)) / 3600) END AS late_hours,
     CASE WHEN s.expected_at IS NOT NULL THEN s.received_at > s.expected_at END AS arrived_late,
@@ -190,7 +190,7 @@ FROM specimens s
 LEFT JOIN test_bench tb ON tb.test_name = lower(regexp_replace(trim(coalesce(s.test, '')), '\s+', ' ', 'g'))
 JOIN deadlines d ON d.priority = s.priority;
 
--- Run-level dashboard
+/* Run-level dashboard */
 CREATE VIEW v_dashboard WITH (security_invoker = true) AS
 WITH agg AS (
     SELECT run_id,
@@ -207,7 +207,7 @@ WITH agg AS (
     GROUP BY run_id
 )
 SELECT r.run_id,
-       round(100.0 * r.quarantine / nullif(r.total, 0))                                       AS error_rate_pct,   -- quarantined / total
+       round(100.0 * r.quarantine / nullif(r.total, 0))                                       AS error_rate_pct,   /* quarantined / total */
        coalesce(round(100.0 * a.breaches / nullif(a.timed, 0)), 0)                            AS sla_breach_rate_pct,
        round(a.avg_lab_hours::numeric, 1)                                                     AS lab_time_hours_avg,
        r.quarantine                                                                           AS quarantine_size,
@@ -219,7 +219,7 @@ SELECT r.run_id,
 FROM runs r
 LEFT JOIN agg a USING (run_id);
 
--- Bottleneck (Slowdown): late delivery vs lab time, by specimen type
+/* Bottleneck (Slowdown): late delivery vs lab time, by specimen type */
 CREATE VIEW v_delivery_by_specimen WITH (security_invoker = true) AS
 SELECT run_id, specimen_type,
        round(avg(late_hours)::numeric, 1) AS avg_late_delivery_hours,
@@ -233,15 +233,15 @@ FROM specimens
 WHERE status = 'REPORTED' AND result IS NOT NULL
 GROUP BY run_id, result;
 
--- Relative efficiency (Raw) vs True efficiency (Fair) for every lab bench and shift.
--- A sample belongs to the shift in which its bench received it (fixed UTC-5 clock).
---   Raw  = finished inside the shift / received in the shift (how benches are graded today).
---   Fair = same, leaving out samples that reached the bench with less shift time left than the bench
---          normally needs (typical hours per test x number of tests on the sample).
+/* Relative efficiency (Raw) vs True efficiency (Fair) for every lab bench and shift. */
+/* A sample belongs to the shift in which its bench received it (fixed UTC-5 clock). */
+/*   Raw  = finished inside the shift / received in the shift (how benches are graded today). */
+/*   Fair = same, leaving out samples that reached the bench with less shift time left than the bench */
+/*          normally needs (typical hours per test x number of tests on the sample). */
 CREATE VIEW v_bench_shift WITH (security_invoker = true) AS
 WITH base AS (
     SELECT v.*,
-           v.bench_start AT TIME ZONE 'Etc/GMT+5' AS local_start         -- Etc/GMT+5 is UTC-5
+           v.bench_start AT TIME ZONE 'Etc/GMT+5' AS local_start         /* Etc/GMT+5 is UTC-5 */
     FROM v_specimens v
 ), shifted AS (
     SELECT b.*,
@@ -250,7 +250,7 @@ WITH base AS (
              + (floor(extract(hour FROM b.local_start) / 8)::int + 1) * interval '8 hours')
             AT TIME ZONE 'Etc/GMT+5') AS shift_end
     FROM base b
-), typical AS (                                                          -- typical hours per test, per bench
+), typical AS (                                                          /* typical hours per test, per bench */
     SELECT run_id, bench_name,
            percentile_cont(0.5) WITHIN GROUP (
                ORDER BY extract(epoch FROM (reported_at - bench_start)) / 3600 / test_count) AS hours_per_test
@@ -284,12 +284,12 @@ SELECT run_id,
 FROM flagged
 GROUP BY run_id, bench_name, shift_no;
 
--- ---------------------------------------------------------------------------
--- Row Level Security (Supabase)
--- With RLS on and no policies, the public API (anon key) can read or write nothing.
--- Your backend uses the service-role key, which bypasses RLS. Views use security_invoker
--- so they follow the same rules. Add policies later only for the access you want to allow.
--- ---------------------------------------------------------------------------
+/* =========================================================================== */
+/* Row Level Security (Supabase) */
+/* With RLS on and no policies, the public API (anon key) can read or write nothing. */
+/* Your backend uses the service-role key, which bypasses RLS. Views use security_invoker */
+/* so they follow the same rules. Add policies later only for the access you want to allow. */
+/* =========================================================================== */
 
 ALTER TABLE error_codes       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deadlines         ENABLE ROW LEVEL SECURITY;
