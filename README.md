@@ -29,7 +29,7 @@ Times are shown in military hours with EST in parentheses, for example 1430 (2:3
 - **Specimen (Sample) delivery, expected vs actual:** on-time delivery rate and average hours late by specimen type, used for Bottleneck (Slowdown) analysis.
 - **Error categories:** every error code is defined on the dashboard and in the Error Guide tab.
 
-Designed around a PostgreSQL (Supabase) relational schema using synthetic data to model sample flow, QC (Quality check) failures, and operational bottlenecks.
+Designed around a PostgreSQL (Supabase) relational schema (see `schema.sql`) using synthetic data to model sample flow, QC (Quality check) failures, and operational bottlenecks.
 
 ## Automatic results
 Normal / Abnormal is calculated from the value, not typed. For each REPORTED sample the app looks up the test in `reference_ranges.js`, picks the range by patient sex and context (for example Fasting or Random glucose), and checks the unit (conventional or SI).
