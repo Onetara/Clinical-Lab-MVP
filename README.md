@@ -3,16 +3,20 @@
 Created By: Dr. Stacy Toriola, MD, MSc.
 
 Production-style monitoring dashboard simulating a high-throughput clinical genomics pipeline (genomics = DNA/RNA testing).
-Goal: monitor lab efficiency. Terms are written as Acronym (Short word) so non-lab readers can follow.
+Goal: Measuring True Efficiency (Fair) vs Relative Efficiency (Raw). Raw efficiency (how benches are graded today) vs Fair efficiency (the same score after removing delays outside the tech’s control, such as late delivery and multi-test handoffs).
+Terms are written as Acronym (Short word) so non-lab readers can follow.
 
 ## Main goal: fair bench scores
-Each lab bench team gets a nightly production efficiency score out of 100%: how many specimens it finished against how many came into its department that night. That score does not account for two things outside the tech's control:
+Each lab bench team gets an 8-hour shift production efficiency score out of 100%: how many specimens it finished against how many came into its department that shift. That score does not account for two things outside the tech's control.
+
+### Efficiency problem
 - **Delivery delays:** specimens that arrive late (expected vs actual arrival), leaving too little time to process them.
 - **Multiple tests on one sample:** extra tests add processing time, and the sample often visits another bench first, so the next bench receives it 2 to 3 hours later (for example Hematology: flow cytometry, mass spec for A1c, blood bank ABO and Rh).
 
+### Raw vs fair efficiency
 The **Bench Shifts** tab shows two scores side by side for every bench and shift (Night 0000-0800, Morning 0800-1600, Afternoon 1600-0000 EST):
-- **Raw score:** finished in shift / received in shift (how benches are graded today).
-- **Fair score:** the same, leaving out samples that reached the bench with less shift time left than the bench normally needs (time needed grows with the number of tests). The gap shows how much of the score came from delivery and handoff, not the tech.
+- **Raw score (Raw efficiency):** finished in shift / received in shift (how benches are graded today).
+- **Fair score (Fair efficiency):** the same, leaving out samples that reached the bench with less shift time left than the bench normally needs (time needed grows with the number of tests). The gap shows how much of the score came from delivery and handoff, not the tech.
 
 Times are shown in military hours with EST in parentheses, for example 1430 (2:30 PM EST).
 
