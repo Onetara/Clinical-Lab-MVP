@@ -215,3 +215,6 @@ figcaption { color: var(--muted); margin-bottom: 6px; }
 
 /* Charts scale to their column */
 canvas { max-width: 100%; height: auto; }
+
+.stcdp-count { background:#4cc9f0; color:#0b1220; border-radius:999px; padding:1px 9px; margin-left:8px; font-size:.85em; font-weight:700; }
+.stcdp-count:empty { display:none; }

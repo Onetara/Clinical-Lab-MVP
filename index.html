@@ -19,14 +19,14 @@
         </div>
         <nav class="stcdp-appbar__nav" aria-label="Lifecycle navigation">
             <button class="stcdp-tab is-active" data-tab="intake" aria-controls="stcdp-panel-intake">Intake</button>
-            <button class="stcdp-tab" data-tab="editor" aria-controls="stcdp-panel-editor">Editor</button>
             <button class="stcdp-tab" data-tab="new" aria-controls="stcdp-panel-new">New Entry</button>
             <button class="stcdp-tab" data-tab="validate" aria-controls="stcdp-panel-validate">Validate</button>
             <button class="stcdp-tab" data-tab="process" aria-controls="stcdp-panel-process">Process</button>
-            <button class="stcdp-tab" data-tab="reconcile" aria-controls="stcdp-panel-reconcile">Reconcile</button>
+            <button class="stcdp-tab" data-tab="reconcile" aria-controls="stcdp-panel-reconcile">Deadlines</button>
             <button class="stcdp-tab" data-tab="audit" aria-controls="stcdp-panel-audit">Audit</button>
             <button class="stcdp-tab" data-tab="dashboard" aria-controls="stcdp-panel-dashboard">Dashboard</button>
-            <button class="stcdp-tab" data-tab="playbooks" aria-controls="stcdp-panel-playbooks">Playbooks</button>
+            <button class="stcdp-tab" data-tab="bench" aria-controls="stcdp-panel-bench">Bench Shifts</button>
+            <button class="stcdp-tab" data-tab="playbooks" aria-controls="stcdp-panel-playbooks">Error Guide</button>
         </nav>
     </header>
 
@@ -47,9 +47,12 @@
                     <div class="stcdp-actions">
                         <button id="btnLoadJson" type="button" class="stcdp-btn">Load Example JSON</button>
                         <button id="btnLoadXml" type="button" class="stcdp-btn">Load Example XML</button>
+                        <button id="btnLoadLarge" type="button" class="stcdp-btn">Load Large Sample (300)</button>
                         <button id="btnClear" type="button" class="stcdp-btn stcdp-btn--ghost">Clear</button>
+                        <button id="btnDownloadCurrent" type="button" class="stcdp-btn">Download Current Data</button>
                     </div>
                 </div>
+                <input id="filePicker" class="stcdp-input" type="file" accept=".json,.xml" aria-label="Open a JSON or XML file" />
                 <label for="inputData" class="stcdp-label">Input Data</label>
                 <textarea id="inputData" class="stcdp-textarea" rows="12" spellcheck="false"
                     placeholder='Paste JSON array of samples or XML &lt;samples&gt;...&lt;/samples&gt;'>
@@ -61,41 +64,11 @@
             </div>
         </section>
 
-        <!-- Editor (new) -->
-        <section id="stcdp-panel-editor" class="stcdp-panel stcdp-hidden" aria-labelledby="editor">
-            <div class="stcdp-card">
-                <h2>Editor — Loaded JSON/XML</h2>
-                <p>Edit the current dataset as raw JSON or XML, or load a file from disk. Apply to re-validate and refresh all views.</p>
-
-                <div class="stcdp-row">
-                    <fieldset class="stcdp-fieldset">
-                        <legend>Editor Format</legend>
-                        <label class="stcdp-radio"><input type="radio" name="editorFormat" value="json" checked> JSON</label>
-                        <label class="stcdp-radio"><input type="radio" name="editorFormat" value="xml"> XML</label>
-                    </fieldset>
-
-                    <input id="filePicker" class="stcdp-input" type="file" accept=".json,.xml" aria-label="Open a JSON or XML file" />
-                    <div class="stcdp-actions">
-                        <button id="btnShowCurrent" type="button" class="stcdp-btn">Show Current</button>
-                        <button id="btnBeautify" type="button" class="stcdp-btn">Beautify</button>
-                        <button id="btnApplyEditor" type="button" class="stcdp-btn stcdp-btn--primary">Apply Changes</button>
-                        <button id="btnDownloadCurrent" type="button" class="stcdp-btn">Download</button>
-                    </div>
-                </div>
-
-                <label for="editorText" class="stcdp-label">Editor</label>
-                <textarea id="editorText" class="stcdp-textarea" rows="16" spellcheck="false"
-                    placeholder="Edit JSON array or &lt;samples&gt;...&lt;/samples&gt;"></textarea>
-
-                <div id="editorSummary" class="stcdp-summary" role="status" aria-live="polite"></div>
-            </div>
-        </section>
-
         <!-- New Entry (new) -->
         <section id="stcdp-panel-new" class="stcdp-panel stcdp-hidden" aria-labelledby="new">
             <div class="stcdp-card">
                 <h2>New Clinical Sample Entry</h2>
-                <p>Add a new sample to the current dataset (then re-validate). Date-time should be ISO-8601; use the picker below and we’ll convert.</p>
+                <p>Add a new sample to the current dataset (then re-validate). Pick the date, then type the time as 4-digit military time in EST, e.g. 1430 (2:30 PM EST).</p>
 
                 <div class="stcdp-grid">
                     <div>
@@ -165,8 +138,11 @@
                         <datalist id="unitList"></datalist>
                     </div>
                     <div>
-                        <label class="stcdp-label" for="newCollected">Collected At</label>
-                        <input id="newCollected" type="datetime-local" class="stcdp-input" />
+                        <label class="stcdp-label" for="newCollectedDate">Collected At</label>
+                        <div class="stcdp-row" style="gap:6px;">
+                            <input id="newCollectedDate" type="date" class="stcdp-input" aria-label="Collected At date" />
+                            <input id="newCollectedTime" class="stcdp-input" inputmode="numeric" maxlength="5" placeholder="1430" style="max-width:90px;" aria-label="Collected At time, 24-hour HHMM, EST" />
+                        </div>
                     </div>
                     <div>
                         <label class="stcdp-label" for="newAccession">Accession</label>
@@ -187,16 +163,42 @@
                         </select>
                     </div>
                     <div>
-                        <label class="stcdp-label" for="newExpected">Expected Arrival</label>
-                        <input id="newExpected" type="datetime-local" class="stcdp-input" />
+                        <label class="stcdp-label" for="newBench">Lab Bench (blank = automatic)</label>
+                        <select id="newBench" class="stcdp-input">
+                            <option value="">Automatic</option><option>Chemistry</option><option>Hematology</option><option>Immunoassay</option><option>Urinalysis</option><option>Blood Bank</option>
+                        </select>
                     </div>
                     <div>
-                        <label class="stcdp-label" for="newReceived">Actual Arrival</label>
-                        <input id="newReceived" type="datetime-local" class="stcdp-input" />
+                        <label class="stcdp-label" for="newTestCount">Tests on this sample</label>
+                        <input id="newTestCount" type="number" min="1" max="20" value="1" class="stcdp-input" />
                     </div>
                     <div>
-                        <label class="stcdp-label" for="newReported">Result Reported At</label>
-                        <input id="newReported" type="datetime-local" class="stcdp-input" />
+                        <label class="stcdp-label" for="newBenchReceivedDate">Bench Received At (blank = same as arrival)</label>
+                        <div class="stcdp-row" style="gap:6px;">
+                            <input id="newBenchReceivedDate" type="date" class="stcdp-input" aria-label="Bench received date" />
+                            <input id="newBenchReceivedTime" class="stcdp-input" inputmode="numeric" maxlength="5" placeholder="1630" style="max-width:90px;" aria-label="Bench received time, 24-hour HHMM, EST" />
+                        </div>
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newExpectedDate">Expected Arrival</label>
+                        <div class="stcdp-row" style="gap:6px;">
+                            <input id="newExpectedDate" type="date" class="stcdp-input" aria-label="Expected Arrival date" />
+                            <input id="newExpectedTime" class="stcdp-input" inputmode="numeric" maxlength="5" placeholder="1430" style="max-width:90px;" aria-label="Expected Arrival time, 24-hour HHMM, EST" />
+                        </div>
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newReceivedDate">Actual Arrival (delivery time) (required)</label>
+                        <div class="stcdp-row" style="gap:6px;">
+                            <input id="newReceivedDate" type="date" class="stcdp-input" aria-label="Actual Arrival (delivery time) date" />
+                            <input id="newReceivedTime" class="stcdp-input" inputmode="numeric" maxlength="5" placeholder="1430" style="max-width:90px;" aria-label="Actual Arrival (delivery time) time, 24-hour HHMM, EST" />
+                        </div>
+                    </div>
+                    <div>
+                        <label class="stcdp-label" for="newReportedDate">Result Reported At</label>
+                        <div class="stcdp-row" style="gap:6px;">
+                            <input id="newReportedDate" type="date" class="stcdp-input" aria-label="Result Reported At date" />
+                            <input id="newReportedTime" class="stcdp-input" inputmode="numeric" maxlength="5" placeholder="1430" style="max-width:90px;" aria-label="Result Reported At time, 24-hour HHMM, EST" />
+                        </div>
                     </div>
                 </div>
 
@@ -232,7 +234,7 @@
                 </div>
 
                 <details class="stcdp-details">
-                    <summary>Error Details</summary>
+                    <summary>Error Details <span id="cntErrors" class="stcdp-count"></span></summary>
                     <div class="stcdp-tablewrap">
                         <table class="stcdp-table" aria-label="Validation errors">
                             <thead>
@@ -246,7 +248,7 @@
                 </details>
 
                 <details class="stcdp-details">
-                    <summary>Quarantine</summary>
+                    <summary>Quarantine <span id="cntQuarantine" class="stcdp-count"></span></summary>
                     <div class="stcdp-tablewrap">
                         <table class="stcdp-table" aria-label="Quarantined records">
                             <thead>
@@ -272,7 +274,22 @@
                 <div id="processSummary" class="stcdp-summary" role="status" aria-live="polite"></div>
 
                 <details class="stcdp-details" open>
-                    <summary>Result check (Reference range): Normal (In range) / Abnormal (Out of range)</summary>
+                    <summary>Specimen (Sample) delivery: expected vs actual arrival (military time, EST) <span id="cntDelivery" class="stcdp-count"></span></summary>
+                    <p class="stcdp-help">Shows when each sample was due and when it really arrived. Late arrival is a delivery slowdown, not lab handling time.</p>
+                    <div class="stcdp-tablewrap">
+                        <table class="stcdp-table" aria-label="Specimen delivery">
+                            <thead>
+                                <tr>
+                                    <th>#</th><th>Record ID</th><th>Specimen</th><th>Expected arrival</th><th>Actual arrival</th><th>Hours late</th><th>Delivery</th><th>Result reported</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblDelivery"></tbody>
+                        </table>
+                    </div>
+                </details>
+
+                <details class="stcdp-details" open>
+                    <summary>Result check (Reference range): Normal (In range) / Abnormal (Out of range) <span id="cntResults" class="stcdp-count"></span></summary>
                     <p class="stcdp-help">Calculated for REPORTED samples from the NBME reference ranges. Replaces any typed result.</p>
                     <div class="stcdp-tablewrap">
                         <table class="stcdp-table" aria-label="Computed results">
@@ -307,7 +324,7 @@
                 </div>
 
                 <details class="stcdp-details">
-                    <summary>ACK (Receipt) Details</summary>
+                    <summary>ACK (Receipt) Details <span id="cntAck" class="stcdp-count"></span></summary>
                     <div class="stcdp-tablewrap">
                         <table class="stcdp-table" aria-label="Reconciliation ACK (Receipt) results">
                             <thead>
@@ -371,7 +388,7 @@
                         <div id="metricSlaRate" class="stcdp-metric">0%</div>
                     </div>
                     <div class="stcdp-card stcdp-card--tile clsdw-hover-tilt">
-                        <div class="stcdp-card__title">Average TAT (Wait time)</div>
+                        <div class="stcdp-card__title">TAT (Lab time)</div>
                         <div id="metricAvgWait" class="stcdp-metric">n/a</div>
                     </div>
                     <div class="stcdp-card stcdp-card--tile clsdw-hover-tilt">
@@ -402,7 +419,7 @@
                         <canvas id="chartWait" width="520" height="240" aria-label="Wait time histogram"></canvas>
                     </figure>
                     <figure>
-                        <figcaption>Bottleneck (Slowdown): average hours late, by Specimen (Sample) type</figcaption>
+                        <figcaption>Bottleneck (Slowdown): late delivery vs lab time, by Specimen (Sample) type</figcaption>
                         <canvas id="chartDelivery" width="520" height="240" aria-label="Delivery delay by specimen type"></canvas>
                     </figure>
                     <figure>
@@ -414,10 +431,36 @@
             </div>
         </section>
 
+        <!-- Bench Shifts -->
+        <section id="stcdp-panel-bench" class="stcdp-panel stcdp-hidden" aria-labelledby="bench">
+            <div class="stcdp-card">
+                <h2>Bench Shifts (Production efficiency per lab bench)</h2>
+                <p>Shifts in EST: Night 0000-0800, Morning 0800-1600, Afternoon 1600-0000. A sample belongs to the shift in which its bench received it.</p>
+                <ul class="stcdp-help">
+                    <li><strong>Raw score:</strong> finished in shift &divide; received in shift (how benches are graded today).</li>
+                    <li><strong>Late arrivals:</strong> reached the bench with less shift time left than the bench normally needs (more tests on a sample means more time needed). They are left out of the fair score.</li>
+                    <li><strong>Fair score:</strong> the same calculation without those late arrivals. The gap shows how much of the score came from delivery and handoff delays, not the tech.</li>
+                </ul>
+                <details class="stcdp-details" open>
+                    <summary>Bench and shift results <span id="cntBench" class="stcdp-count"></span></summary>
+                    <div class="stcdp-tablewrap">
+                        <table class="stcdp-table" aria-label="Bench shift efficiency">
+                            <thead>
+                                <tr>
+                                    <th>Bench</th><th>Shift</th><th>Received</th><th>Raw score</th><th>Late arrivals</th><th>Fair score</th><th>Gap</th><th>Multi-test samples</th><th>Avg bench time (h)</th><th>Avg handoff wait (h)</th><th>Avg late delivery (h)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblBench"></tbody>
+                        </table>
+                    </div>
+                </details>
+            </div>
+        </section>
+
         <!-- Playbooks -->
         <section id="stcdp-panel-playbooks" class="stcdp-panel stcdp-hidden" aria-labelledby="playbooks">
             <div class="stcdp-card">
-                <h2>Troubleshooting Playbooks</h2>
+                <h2>Error Guide (Troubleshooting playbooks)</h2>
                 <p>Click an error code in the Validation table to jump here with the right playbook expanded.</p>
                 <div id="playbookList" class="stcdp-playbooks" role="list"></div>
             </div>
@@ -430,6 +473,7 @@
 
     <script src="reference_ranges.js"></script>
     <script src="diagnostic_criteria.js"></script>
+    <script src="sample_data_large.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
